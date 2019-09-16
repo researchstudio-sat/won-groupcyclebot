@@ -10,11 +10,13 @@ import java.util.List;
  * Created by fsuda on 14.04.2017.
  */
 public class GroupBotContextWrapper extends BotContextWrapper {
-    private String groupListName = getBotName() + ":groupList";
-    private String groupMembersListName = getBotName() + ":groupMembers";
+    private final String groupListName;
+    private final String groupMembersListName;
 
     public GroupBotContextWrapper(BotContext botContext, String botName) {
         super(botContext, botName);
+        this.groupListName = botName + ":groupList";
+        this.groupMembersListName = botName + ":groupMembers";
     }
 
     @Override

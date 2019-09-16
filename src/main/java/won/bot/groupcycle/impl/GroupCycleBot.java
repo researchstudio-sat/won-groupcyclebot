@@ -125,7 +125,7 @@ public class GroupCycleBot extends EventBot {
      * deactivate message is the URI of the created group atom.
      */
     private class CreateGroupBehaviour extends BotBehaviour {
-        public CreateGroupBehaviour(EventListenerContext context) {
+        CreateGroupBehaviour(EventListenerContext context) {
             super(context);
         }
 
@@ -155,7 +155,7 @@ public class GroupCycleBot extends EventBot {
     }
 
     private class CreateGroupMembersBehaviour extends BotBehaviour {
-        public CreateGroupMembersBehaviour(EventListenerContext context) {
+        CreateGroupMembersBehaviour(EventListenerContext context) {
             super(context);
         }
 
@@ -231,11 +231,11 @@ public class GroupCycleBot extends EventBot {
                                                 ConnectCommandResultEvent resultEvent = (ConnectCommandResultEvent) event;
                                                 logger.debug(
                                                         "sending connect to group atom {} on behalf of member {}, succeeded: {}",
-                                                        new Object[] { connectCommandEvent
+                                                        connectCommandEvent
                                                                 .getTargetAtomURI(),
-                                                                connectCommandEvent
-                                                                        .getAtomURI(),
-                                                                resultEvent.isSuccess() });
+                                                        connectCommandEvent
+                                                                .getAtomURI(),
+                                                        resultEvent.isSuccess());
                                             }
                                         }));
                         // set up a listener for the response from the group atom
@@ -285,7 +285,7 @@ public class GroupCycleBot extends EventBot {
     }
 
     private class OpenOnConnectBehaviour extends BotBehaviour {
-        public OpenOnConnectBehaviour(EventListenerContext context) {
+        OpenOnConnectBehaviour(EventListenerContext context) {
             super(context);
         }
 
@@ -315,12 +315,8 @@ public class GroupCycleBot extends EventBot {
     }
 
     private class ConnectGroupsBehaviour extends BotBehaviour {
-        public ConnectGroupsBehaviour(EventListenerContext context) {
+        ConnectGroupsBehaviour(EventListenerContext context) {
             super(context);
-        }
-
-        public ConnectGroupsBehaviour(EventListenerContext context, String name) {
-            super(context, name);
         }
 
         @Override
@@ -381,9 +377,9 @@ public class GroupCycleBot extends EventBot {
                             ConnectCommandResultEvent resultEvent = (ConnectCommandResultEvent) event;
                             logger.debug(
                                     "sending connect to group atom {} on behalf of group atom {}, succeeded: {}",
-                                    new Object[] { connectCommandEvent.getTargetAtomURI(),
-                                            connectCommandEvent.getAtomURI(),
-                                            resultEvent.isSuccess() });
+                                    connectCommandEvent.getTargetAtomURI(),
+                                    connectCommandEvent.getAtomURI(),
+                                    resultEvent.isSuccess());
                         }
                     }));
                     // set up a listener for the response from the group atom
@@ -414,7 +410,7 @@ public class GroupCycleBot extends EventBot {
     }
 
     private class LogConnectionMessageBehaviour extends BotBehaviour {
-        public LogConnectionMessageBehaviour(EventListenerContext context) {
+        LogConnectionMessageBehaviour(EventListenerContext context) {
             super(context);
         }
 
@@ -433,16 +429,16 @@ public class GroupCycleBot extends EventBot {
                             String textMessage = WonRdfUtils.MessageUtils.getTextMessage(message);
                             URI messageURI = message.getMessageURI();
                             logger.debug("atom {} received message from atom {}, text: '{}', message uri: {}",
-                                    new Object[] { messageEvent.getAtomURI(),
-                                            messageEvent.getTargetAtomURI(),
-                                            textMessage, messageURI });
+                                    messageEvent.getAtomURI(),
+                                    messageEvent.getTargetAtomURI(),
+                                    textMessage, messageURI);
                         }
                     }));
         }
     }
 
     private class SendOneMessageBehaviour extends BotBehaviour {
-        public SendOneMessageBehaviour(EventListenerContext context) {
+        SendOneMessageBehaviour(EventListenerContext context) {
             super(context);
         }
 
@@ -467,26 +463,26 @@ public class GroupCycleBot extends EventBot {
     private class ConnectionHolder {
         private Connection connection;
 
-        public ConnectionHolder() {
+        ConnectionHolder() {
         }
 
-        public boolean isSet() {
+        boolean isSet() {
             return connection != null;
         }
 
-        public synchronized void set(Connection connection) {
+        synchronized void set(Connection connection) {
             if (isSet())
                 return;
             this.connection = connection;
         }
 
-        public Connection getConnection() {
+        Connection getConnection() {
             return connection;
         }
     }
 
     private class CountReceivedMessagesBehaviour extends BotBehaviour {
-        public CountReceivedMessagesBehaviour(EventListenerContext context) {
+        CountReceivedMessagesBehaviour(EventListenerContext context) {
             super(context);
         }
 
@@ -537,7 +533,7 @@ public class GroupCycleBot extends EventBot {
     }
 
     private class OutputInfoMessagesBehaviour extends BotBehaviour {
-        public OutputInfoMessagesBehaviour(EventListenerContext context) {
+        OutputInfoMessagesBehaviour(EventListenerContext context) {
             super(context);
         }
 
@@ -609,18 +605,18 @@ public class GroupCycleBot extends EventBot {
     }
 
     private class GroupCreatedEvent extends BaseAtomSpecificEvent {
-        public GroupCreatedEvent(URI atomURI) {
+        GroupCreatedEvent(URI atomURI) {
             super(atomURI);
         }
     }
 
     private class GroupMembersConnectedEvent extends BaseEvent {
-        public GroupMembersConnectedEvent() {
+        GroupMembersConnectedEvent() {
         }
     }
 
     private class GroupMemberCreatedEvent extends BaseAtomSpecificEvent {
-        public GroupMemberCreatedEvent(URI atomURI) {
+        GroupMemberCreatedEvent(URI atomURI) {
             super(atomURI);
         }
     }
