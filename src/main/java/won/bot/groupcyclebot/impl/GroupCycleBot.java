@@ -1,4 +1,4 @@
-package won.bot.groupcycle.impl;
+package won.bot.groupcyclebot.impl;
 
 import org.apache.jena.query.Dataset;
 import org.slf4j.Logger;
@@ -29,7 +29,7 @@ import won.bot.framework.eventbot.filter.impl.CommandResultFilter;
 import won.bot.framework.eventbot.listener.EventListener;
 import won.bot.framework.eventbot.listener.impl.ActionOnEventListener;
 import won.bot.framework.eventbot.listener.impl.ActionOnFirstEventListener;
-import won.bot.groupcycle.context.GroupBotContextWrapper;
+import won.bot.groupcyclebot.context.GroupBotContextWrapper;
 import won.protocol.message.WonMessage;
 import won.protocol.model.Connection;
 import won.protocol.model.SocketType;

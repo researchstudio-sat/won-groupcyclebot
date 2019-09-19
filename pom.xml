@@ -67,7 +67,7 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <version>2.1.7.RELEASE</version>
                 <configuration>
-                    <mainClass>won.bot.groupcycle.GroupCycleBotApp</mainClass>
+                    <mainClass>won.bot.groupcyclebot.GroupCycleBotApp</mainClass>
                 </configuration>
                 <executions>
                     <execution>

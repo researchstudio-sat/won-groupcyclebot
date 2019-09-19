@@ -23,7 +23,7 @@
     <import resource="classpath:spring/component/botContext/botContext.xml"/>
     <import resource="classpath:/spring/component/atomproducer/atomproducer-mixed.xml"/>
 
-    <bean id="groupCycleBot" class="won.bot.groupcycle.impl.GroupCycleBot">
+    <bean id="groupCycleBot" class="won.bot.groupcyclebot.impl.GroupCycleBot">
         <!-- optional property, by default one echo atom per each atom will be created -->
         <property name="taskScheduler" ref="taskScheduler"/>
         <property name="botContextWrapper" ref="botContextWrapper"/>
@@ -45,7 +45,7 @@
         </property>
     </bean>
 
-    <bean id="botContextWrapper" class="won.bot.groupcycle.context.GroupBotContextWrapper">
+    <bean id="botContextWrapper" class="won.bot.groupcyclebot.context.GroupBotContextWrapper">
         <constructor-arg name="botContext" ref="${botContext.impl}"/>
         <constructor-arg name="botName" value="${bot.name}"/>
     </bean>

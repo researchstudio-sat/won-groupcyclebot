@@ -1,4 +1,4 @@
-package won.bot.groupcycle.context;
+package won.bot.groupcyclebot.context;
 
 import won.bot.framework.bot.context.BotContext;
 import won.bot.framework.bot.context.BotContextWrapper;
