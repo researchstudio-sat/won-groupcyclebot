@@ -1,15 +1,25 @@
 package won.bot.groupcyclebot.impl;
 
-import jdk.nashorn.internal.objects.annotations.Property;
+import java.lang.invoke.MethodHandles;
+import java.net.URI;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
 import org.apache.jena.query.Dataset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+
 import won.bot.framework.bot.base.EventBot;
 import won.bot.framework.eventbot.EventListenerContext;
 import won.bot.framework.eventbot.action.BaseEventBotAction;
-import won.bot.framework.eventbot.action.impl.counter.*;
+import won.bot.framework.eventbot.action.impl.counter.CountEvent;
+import won.bot.framework.eventbot.action.impl.counter.CounterImpl;
+import won.bot.framework.eventbot.action.impl.counter.EventPublishingCounter;
+import won.bot.framework.eventbot.action.impl.counter.IncrementCounterAction;
+import won.bot.framework.eventbot.action.impl.counter.TargetCountReachedEvent;
+import won.bot.framework.eventbot.action.impl.counter.TargetCounterDecorator;
 import won.bot.framework.eventbot.behaviour.BehaviourBarrier;
 import won.bot.framework.eventbot.behaviour.BotBehaviour;
 import won.bot.framework.eventbot.behaviour.ExecuteWonMessageCommandBehaviour;
@@ -22,11 +32,9 @@ import won.bot.framework.eventbot.event.impl.command.connect.ConnectCommandResul
 import won.bot.framework.eventbot.event.impl.command.connectionmessage.ConnectionMessageCommandEvent;
 import won.bot.framework.eventbot.event.impl.command.create.CreateAtomCommandEvent;
 import won.bot.framework.eventbot.event.impl.command.create.CreateAtomCommandResultEvent;
-import won.bot.framework.eventbot.event.impl.command.open.OpenCommandEvent;
 import won.bot.framework.eventbot.event.impl.lifecycle.InitializeEvent;
 import won.bot.framework.eventbot.event.impl.wonmessage.ConnectFromOtherAtomEvent;
 import won.bot.framework.eventbot.event.impl.wonmessage.MessageFromOtherAtomEvent;
-import won.bot.framework.eventbot.event.impl.wonmessage.OpenFromOtherAtomEvent;
 import won.bot.framework.eventbot.filter.impl.AtomUriEventFilter;
 import won.bot.framework.eventbot.filter.impl.CommandResultFilter;
 import won.bot.framework.eventbot.listener.EventListener;
@@ -38,13 +46,7 @@ import won.protocol.model.Connection;
 import won.protocol.model.SocketType;
 import won.protocol.util.DefaultAtomModelWrapper;
 import won.protocol.util.WonRdfUtils;
-
-import java.lang.invoke.MethodHandles;
-import java.net.URI;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import won.protocol.util.linkeddata.WonLinkedDataUtils;
 
 /**
  * Bot that creates NUMBER_OF_GROUPS groupchats, adds NUMBER_OF_GROUPMEMBERS
@@ -55,7 +57,7 @@ import java.util.Set;
 public class GroupCycleBot extends EventBot {
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     private final int NUMBER_OF_GROUPMEMBERS = 3;
-    private final int NUMBER_OF_GROUPS = 10;
+    private final int NUMBER_OF_GROUPS = 2;
     private final ConnectionHolder connectionForFirstMessage = new ConnectionHolder();
 
     @Override
@@ -63,25 +65,25 @@ public class GroupCycleBot extends EventBot {
         EventListenerContext ctx = getEventListenerContext();
         // start with a friendly message
         ctx.getEventBus().subscribe(InitializeEvent.class,
-                new ActionOnFirstEventListener(ctx, new BaseEventBotAction(ctx) {
-                    @Override
-                    protected void doRun(Event event, EventListener executingListener) throws Exception {
-                        logger.info("");
-                        logger.info("We will create {} groups with {} members each.", NUMBER_OF_GROUPS,
-                                NUMBER_OF_GROUPMEMBERS);
-                        logger.info(
-                                "The groups all be connected to each other, resulting in {} group-group connections",
-                                NUMBER_OF_GROUPS * (NUMBER_OF_GROUPS - 1) / 2);
-                        logger.info(
-                                "Then, one group member will send a message to its group, which should reach all other group members exactly once");
-                        logger.info("This will result in {} messages being received.",
-                                NUMBER_OF_GROUPS * NUMBER_OF_GROUPMEMBERS - 1);
-                        logger.info("The groups will forward {} messages and suppress {} duplicates",
-                                NUMBER_OF_GROUPS * (NUMBER_OF_GROUPS + NUMBER_OF_GROUPMEMBERS - 2),
-                                (int) Math.pow(NUMBER_OF_GROUPS, 2) - 3 * NUMBER_OF_GROUPS + 2);
-                        logger.info("");
-                    }
-                }));
+                        new ActionOnFirstEventListener(ctx, new BaseEventBotAction(ctx) {
+                            @Override
+                            protected void doRun(Event event, EventListener executingListener) throws Exception {
+                                logger.info("");
+                                logger.info("We will create {} groups with {} members each.", NUMBER_OF_GROUPS,
+                                                NUMBER_OF_GROUPMEMBERS);
+                                logger.info(
+                                                "The groups all be connected to each other, resulting in {} group-group connections",
+                                                NUMBER_OF_GROUPS * (NUMBER_OF_GROUPS - 1) / 2);
+                                logger.info(
+                                                "Then, one group member will send a message to its group, which should reach all other group members exactly once");
+                                logger.info("This will result in {} messages being received.",
+                                                NUMBER_OF_GROUPS * NUMBER_OF_GROUPMEMBERS - 1);
+                                logger.info("The groups will forward {} messages and suppress {} duplicates",
+                                                NUMBER_OF_GROUPS * (NUMBER_OF_GROUPS + NUMBER_OF_GROUPMEMBERS - 2),
+                                                (int) Math.pow(NUMBER_OF_GROUPS, 2) - 3 * NUMBER_OF_GROUPS + 2);
+                                logger.info("");
+                            }
+                        }));
         // understand message commands
         BotBehaviour messageCommandBehaviour = new ExecuteWonMessageCommandBehaviour(ctx);
         messageCommandBehaviour.activate();
@@ -102,12 +104,12 @@ public class GroupCycleBot extends EventBot {
             barrier.waitFor(groupMembers);
             // wait for the initialize event and trigger group creation
             ctx.getEventBus().subscribe(InitializeEvent.class,
-                    new ActionOnFirstEventListener(ctx, new BaseEventBotAction(ctx) {
-                        @Override
-                        protected void doRun(Event event, EventListener executingListener) throws Exception {
-                            groupCreate.activate();
-                        }
-                    }));
+                            new ActionOnFirstEventListener(ctx, new BaseEventBotAction(ctx) {
+                                @Override
+                                protected void doRun(Event event, EventListener executingListener) throws Exception {
+                                    groupCreate.activate();
+                                }
+                            }));
         }
         BotBehaviour connectGroupsBehaviour = new ConnectGroupsBehaviour(ctx);
         barrier.thenStart(connectGroupsBehaviour);
@@ -137,22 +139,22 @@ public class GroupCycleBot extends EventBot {
             GroupBotContextWrapper botContextWrapper = (GroupBotContextWrapper) getBotContextWrapper();
             Dataset atomDataset = createAtomDataset("Group Atom", "Used for testing if groups suppress echos");
             CommandEvent command = new CreateAtomCommandEvent(atomDataset, botContextWrapper.getGroupListName(), true,
-                    true, SocketType.ChatSocket.getURI(), SocketType.GroupSocket.getURI());
+                            true, SocketType.ChatSocket.getURI(), SocketType.GroupSocket.getURI());
             subscribeWithAutoCleanup(CreateAtomCommandResultEvent.class, new ActionOnFirstEventListener(context,
-                    new CommandResultFilter(command), new BaseEventBotAction(context) {
-                @Override
-                protected void doRun(Event event, EventListener executingListener) throws Exception {
-                    CreateAtomCommandResultEvent resultEvent = (CreateAtomCommandResultEvent) event;
-                    logger.debug("creating group atom succeeded: {}, atom uri: {}",
-                            resultEvent.isSuccess(),
-                            resultEvent.getAtomURI());
-                    Optional<Object> uriMessage = resultEvent.isSuccess()
-                            ? Optional.of(resultEvent.getAtomURI())
-                            : Optional.empty();
-                    context.getEventBus().publish(new GroupCreatedEvent(resultEvent.getAtomURI()));
-                    deactivate(uriMessage);
-                }
-            }));
+                            new CommandResultFilter(command), new BaseEventBotAction(context) {
+                                @Override
+                                protected void doRun(Event event, EventListener executingListener) throws Exception {
+                                    CreateAtomCommandResultEvent resultEvent = (CreateAtomCommandResultEvent) event;
+                                    logger.info("creating group atom succeeded: {}, atom uri: {}",
+                                                    resultEvent.isSuccess(),
+                                                    resultEvent.getAtomURI());
+                                    Optional<Object> uriMessage = resultEvent.isSuccess()
+                                                    ? Optional.of(resultEvent.getAtomURI())
+                                                    : Optional.empty();
+                                    context.getEventBus().publish(new GroupCreatedEvent(resultEvent.getAtomURI()));
+                                    deactivate(uriMessage);
+                                }
+                            }));
             context.getEventBus().publish(command);
         }
     }
@@ -174,116 +176,126 @@ public class GroupCycleBot extends EventBot {
             GroupBotContextWrapper botContextWrapper = (GroupBotContextWrapper) getBotContextWrapper();
             URI groupAtomURI = (URI) message.get();
             TargetCounterDecorator memberCreationCounter = new TargetCounterDecorator(context,
-                    new CounterImpl("memberCreationCounter", 0), NUMBER_OF_GROUPMEMBERS);
+                            new CounterImpl("memberCreationCounter", 0), NUMBER_OF_GROUPMEMBERS);
             TargetCounterDecorator membersConnectedCounter = new TargetCounterDecorator(context,
-                    new CounterImpl("membersConnectedCounter", 0), NUMBER_OF_GROUPMEMBERS);
+                            new CounterImpl("membersConnectedCounter", 0), NUMBER_OF_GROUPMEMBERS);
             Set<URI> members = new HashSet<>();
             // create N group members
             for (int i = 0; i < NUMBER_OF_GROUPMEMBERS; i++) {
                 Dataset atomDataset = createAtomDataset("Group Memeber Atom",
-                        "Used for testing if groups suppress echos");
+                                "Used for testing if groups suppress echos");
                 CommandEvent command = new CreateAtomCommandEvent(atomDataset,
-                        botContextWrapper.getGroupMembersListName(), true, true,
-                        SocketType.ChatSocket.getURI());
+                                botContextWrapper.getGroupMembersListName(), true, true,
+                                SocketType.ChatSocket.getURI());
                 subscribeWithAutoCleanup(CreateAtomCommandResultEvent.class, new ActionOnFirstEventListener(context,
-                        new CommandResultFilter(command), new BaseEventBotAction(context) {
-                    @Override
-                    protected void doRun(Event event, EventListener executingListener)
-                            throws Exception {
-                        CreateAtomCommandResultEvent resultEvent = (CreateAtomCommandResultEvent) event;
-                        logger.debug("creating group member succeeded: {}, atom uri: {}",
-                                resultEvent.isSuccess(), resultEvent.getAtomURI());
-                        if (resultEvent.isSuccess()) {
-                            members.add(resultEvent.getAtomURI());
-                            context.getEventBus()
-                                    .publish(new GroupMemberCreatedEvent(
-                                            resultEvent.getAtomURI()));
-                        }
-                        memberCreationCounter.increment();
-                    }
-                }));
+                                new CommandResultFilter(command), new BaseEventBotAction(context) {
+                                    @Override
+                                    protected void doRun(Event event, EventListener executingListener)
+                                                    throws Exception {
+                                        CreateAtomCommandResultEvent resultEvent = (CreateAtomCommandResultEvent) event;
+                                        logger.info("creating group member succeeded: {}, atom uri: {}",
+                                                        resultEvent.isSuccess(), resultEvent.getAtomURI());
+                                        if (resultEvent.isSuccess()) {
+                                            members.add(resultEvent.getAtomURI());
+                                            context.getEventBus()
+                                                            .publish(new GroupMemberCreatedEvent(
+                                                                            resultEvent.getAtomURI()));
+                                        }
+                                        memberCreationCounter.increment();
+                                    }
+                                }));
                 context.getEventBus().publish(command);
             }
             // wait for them to be created
             subscribeWithAutoCleanup(TargetCountReachedEvent.class, new ActionOnFirstEventListener(context,
-                    memberCreationCounter.makeEventFilter(), new BaseEventBotAction(context) {
-                @Override
-                protected void doRun(Event event, EventListener executingListener) throws Exception {
-                    // make sure all members were created successfully
-                    if (members.size() != NUMBER_OF_GROUPMEMBERS) {
-                        logger.error("expected {} members to be successfully created, but {} were",
-                                NUMBER_OF_GROUPMEMBERS, members.size());
-                        deactivate();
-                    }
-                    // now, connect all group members
-                    members.forEach(memberURI -> {
-                        // prepare the command
-                        ConnectCommandEvent connectCommandEvent = new ConnectCommandEvent(memberURI,
-                                groupAtomURI, SocketType.ChatSocket.getURI(),
-                                SocketType.GroupSocket.getURI(),
-                                "Hello from your latest would-be member!");
-                        // set up a listener for the result of the command
-                        subscribeWithAutoCleanup(ConnectCommandResultEvent.class,
-                                new ActionOnFirstEventListener(context,
-                                        new CommandResultFilter(connectCommandEvent),
-                                        new BaseEventBotAction(context) {
-                                            @Override
-                                            protected void doRun(Event event,
-                                                                 EventListener executingListener)
-                                                    throws Exception {
-                                                ConnectCommandResultEvent resultEvent = (ConnectCommandResultEvent) event;
-                                                logger.debug(
-                                                        "sending connect to group atom {} on behalf of member {}, succeeded: {}",
-                                                        connectCommandEvent
-                                                                .getTargetAtomURI(),
-                                                        connectCommandEvent
-                                                                .getAtomURI(),
-                                                        resultEvent.isSuccess());
-                                            }
-                                        }));
-                        // set up a listener for the response from the group atom
-                        subscribeWithAutoCleanup(OpenFromOtherAtomEvent.class,
-                                new ActionOnEventListener(context, event1 -> {
-                                    if (!(event1 instanceof OpenFromOtherAtomEvent))
-                                        return false;
-                                    OpenFromOtherAtomEvent openEvent = (OpenFromOtherAtomEvent) event1;
-                                    if (!groupAtomURI.equals(openEvent.getTargetAtomURI()))
-                                        return false;
-                                    return memberURI.equals(openEvent.getAtomURI());
-                                }, new BaseEventBotAction(context) {
-                                    @Override
-                                    protected void doRun(Event event,
-                                                         EventListener executingListener)
-                                            throws Exception {
-                                        OpenFromOtherAtomEvent openEvent = (OpenFromOtherAtomEvent) event;
-                                        logger.debug("received open from group atom {} on behalf of member {}",
-                                                new Object[] { openEvent
-                                                        .getTargetAtomURI(),
-                                                        openEvent.getAtomURI() });
-                                        membersConnectedCounter.increment();
-                                        // remember the connection of the first open
-                                        if (!connectionForFirstMessage.isSet()) {
-                                            connectionForFirstMessage.set(openEvent.getCon());
-                                        }
+                            memberCreationCounter.makeEventFilter(), new BaseEventBotAction(context) {
+                                @Override
+                                protected void doRun(Event event, EventListener executingListener) throws Exception {
+                                    // make sure all members were created successfully
+                                    if (members.size() != NUMBER_OF_GROUPMEMBERS) {
+                                        logger.error("expected {} members to be successfully created, but {} were",
+                                                        NUMBER_OF_GROUPMEMBERS, members.size());
+                                        deactivate();
                                     }
-                                }));
-                        // publish the command
-                        context.getEventBus().publish(connectCommandEvent);
-                    });
-                }
-            }));
+                                    // now, connect all group members
+                                    members.forEach(memberURI -> {
+                                        // prepare the command
+                                        Optional<URI> memberAtomSocket = WonLinkedDataUtils.getSocketsOfType(memberURI,
+                                                        SocketType.ChatSocket.getURI(), getLinkedDataSource()).stream()
+                                                        .findFirst();
+                                        Optional<URI> groupAtomSocket = WonLinkedDataUtils
+                                                        .getSocketsOfType(groupAtomURI, SocketType.GroupSocket.getURI(),
+                                                                        getLinkedDataSource())
+                                                        .stream().findFirst();
+                                        if (!(memberAtomSocket.isPresent() && groupAtomSocket.isPresent())) {
+                                            return;
+                                        }
+                                        ConnectCommandEvent connectCommandEvent = new ConnectCommandEvent(
+                                                        memberAtomSocket.get(),
+                                                        groupAtomSocket.get(),
+                                                        "Hello from your latest would-be member!");
+                                        // set up a listener for the result of the command
+                                        subscribeWithAutoCleanup(ConnectCommandResultEvent.class,
+                                                        new ActionOnFirstEventListener(context,
+                                                                        new CommandResultFilter(connectCommandEvent),
+                                                                        new BaseEventBotAction(context) {
+                                                                            @Override
+                                                                            protected void doRun(Event event,
+                                                                                            EventListener executingListener)
+                                                                                            throws Exception {
+                                                                                ConnectCommandResultEvent resultEvent = (ConnectCommandResultEvent) event;
+                                                                                logger.info(
+                                                                                                "sending connect to group atom {} on behalf of member {}, succeeded: {}",
+                                                                                                connectCommandEvent
+                                                                                                                .getTargetAtomURI(),
+                                                                                                connectCommandEvent
+                                                                                                                .getAtomURI(),
+                                                                                                resultEvent.isSuccess());
+                                                                            }
+                                                                        }));
+                                        // set up a listener for the response from the group atom
+                                        subscribeWithAutoCleanup(ConnectFromOtherAtomEvent.class,
+                                                        new ActionOnEventListener(context, event1 -> {
+                                                            if (!(event1 instanceof ConnectFromOtherAtomEvent))
+                                                                return false;
+                                                            ConnectFromOtherAtomEvent openEvent = (ConnectFromOtherAtomEvent) event1;
+                                                            if (!groupAtomURI.equals(openEvent.getTargetAtomURI()))
+                                                                return false;
+                                                            return memberURI.equals(openEvent.getAtomURI());
+                                                        }, new BaseEventBotAction(context) {
+                                                            @Override
+                                                            protected void doRun(Event event,
+                                                                            EventListener executingListener)
+                                                                            throws Exception {
+                                                                ConnectFromOtherAtomEvent openEvent = (ConnectFromOtherAtomEvent) event;
+                                                                logger.info("received connect from group atom {} on behalf of member {}",
+                                                                                new Object[] { openEvent
+                                                                                                .getTargetAtomURI(),
+                                                                                                openEvent.getAtomURI() });
+                                                                membersConnectedCounter.increment();
+                                                                // remember the connection of the first open
+                                                                if (!connectionForFirstMessage.isSet()) {
+                                                                    connectionForFirstMessage.set(openEvent.getCon());
+                                                                }
+                                                            }
+                                                        }));
+                                        // publish the command
+                                        context.getEventBus().publish(connectCommandEvent);
+                                    });
+                                }
+                            }));
             // when all members are connected, finish the behaviour
             subscribeWithAutoCleanup(TargetCountReachedEvent.class, new ActionOnFirstEventListener(context,
-                    membersConnectedCounter.makeEventFilter(), new BaseEventBotAction(context) {
-                @Override
-                protected void doRun(Event event, EventListener executingListener) throws Exception {
-                    logger.debug("finished connecting all {} members to group {} ",
-                            NUMBER_OF_GROUPMEMBERS,
-                            groupAtomURI);
-                    context.getEventBus().publish(new GroupMembersConnectedEvent());
-                    deactivate();
-                }
-            }));
+                            membersConnectedCounter.makeEventFilter(), new BaseEventBotAction(context) {
+                                @Override
+                                protected void doRun(Event event, EventListener executingListener) throws Exception {
+                                    logger.info("finished connecting all {} members to group {} ",
+                                                    NUMBER_OF_GROUPMEMBERS,
+                                                    groupAtomURI);
+                                    context.getEventBus().publish(new GroupMembersConnectedEvent());
+                                    deactivate();
+                                }
+                            }));
         }
     }
 
@@ -303,17 +315,18 @@ public class GroupCycleBot extends EventBot {
             // expect group URI in message
             URI groupAtomURI = (URI) message.get();
             subscribeWithAutoCleanup(ConnectFromOtherAtomEvent.class, new ActionOnEventListener(context,
-                    new AtomUriEventFilter(groupAtomURI), new BaseEventBotAction(context) {
-                @Override
-                protected void doRun(Event event, EventListener executingListener) throws Exception {
-                    Connection con = ((ConnectFromOtherAtomEvent) event).getCon();
-                    logger.debug("received connect from atom {} on behalf of atom {}, responding with OPEN.",
-                            con.getTargetAtomURI(), con.getAtomURI());
-                    OpenCommandEvent openCommandEvent = new OpenCommandEvent(con,
-                            "Welcome from the group atom");
-                    getEventBus().publish(openCommandEvent);
-                }
-            }));
+                            new AtomUriEventFilter(groupAtomURI), new BaseEventBotAction(context) {
+                                @Override
+                                protected void doRun(Event event, EventListener executingListener) throws Exception {
+                                    Connection con = ((ConnectFromOtherAtomEvent) event).getCon();
+                                    logger.info("received connect from atom {} on behalf of atom {}, responding with OPEN.",
+                                                    con.getTargetAtomURI(), con.getAtomURI());
+                                    ConnectCommandEvent openCommandEvent = new ConnectCommandEvent(con.getSocketURI(),
+                                                    con.getTargetSocketURI(),
+                                                    "Welcome from the group atom");
+                                    getEventBus().publish(openCommandEvent);
+                                }
+                            }));
         }
     }
 
@@ -328,83 +341,86 @@ public class GroupCycleBot extends EventBot {
             List<URI> groupAtoms = botContextWrapper.getGroupAtomUris();
             if (groupAtoms == null || groupAtoms.size() != NUMBER_OF_GROUPS) {
                 logger.error("Expected {} group atoms but found {}", NUMBER_OF_GROUPS,
-                        groupAtoms == null ? "null" : groupAtoms.size());
+                                groupAtoms == null ? "null" : groupAtoms.size());
                 return;
             }
             // use a target counter to know when we are finished (and use an
             // EventPublishingCounter as the
             // decorated counter so we can output status messages while counting
             EventPublishingCounter eachGroupConnectionCounter = new EventPublishingCounter("eachGroupConnectionCounter",
-                    context);
+                            context);
             TargetCounterDecorator groupConnectionCounter = new TargetCounterDecorator(context,
-                    eachGroupConnectionCounter, NUMBER_OF_GROUPS * (NUMBER_OF_GROUPS - 1) / 2);
+                            eachGroupConnectionCounter, NUMBER_OF_GROUPS * (NUMBER_OF_GROUPS - 1) / 2);
             // react to each connection separately
             subscribeWithAutoCleanup(CountEvent.class, new ActionOnEventListener(context,
-                    eachGroupConnectionCounter.makeEventFilter(), new BaseEventBotAction(context) {
-                @Override
-                protected void doRun(Event event, EventListener executingListener) throws Exception {
-                    logger.info("established group-group connection {} of {}",
-                            ((CountEvent) event).getCount(),
-                            groupConnectionCounter.getTargetCount());
-                }
-            }));
+                            eachGroupConnectionCounter.makeEventFilter(), new BaseEventBotAction(context) {
+                                @Override
+                                protected void doRun(Event event, EventListener executingListener) throws Exception {
+                                    logger.info("established group-group connection {} of {}",
+                                                    ((CountEvent) event).getCount(),
+                                                    groupConnectionCounter.getTargetCount());
+                                }
+                            }));
             // react to reaching the target count
             subscribeWithAutoCleanup(TargetCountReachedEvent.class, new ActionOnEventListener(context,
-                    groupConnectionCounter.makeEventFilter(), new BaseEventBotAction(context) {
-                @Override
-                protected void doRun(Event event, EventListener executingListener) throws Exception {
-                    if (!(event instanceof TargetCountReachedEvent))
-                        return;
-                    TargetCountReachedEvent countEvent = (TargetCountReachedEvent) event;
-                    logger.info("successfully made {} connections between our {} groups",
-                            countEvent.getCount(),
-                            NUMBER_OF_GROUPS);
-                    deactivate();
-                }
-            }));
+                            groupConnectionCounter.makeEventFilter(), new BaseEventBotAction(context) {
+                                @Override
+                                protected void doRun(Event event, EventListener executingListener) throws Exception {
+                                    if (!(event instanceof TargetCountReachedEvent))
+                                        return;
+                                    TargetCountReachedEvent countEvent = (TargetCountReachedEvent) event;
+                                    logger.info("successfully made {} connections between our {} groups",
+                                                    countEvent.getCount(),
+                                                    NUMBER_OF_GROUPS);
+                                    deactivate();
+                                }
+                            }));
             // connect each group to all other groups
             for (int i = 0; i < groupAtoms.size(); i++) {
                 URI groupAtomURI = groupAtoms.get(i);
                 for (int j = i + 1; j < groupAtoms.size(); j++) {
                     URI remoteGroupAtomURI = groupAtoms.get(j);
                     // prepare the command
-                    ConnectCommandEvent connectCommandEvent = new ConnectCommandEvent(groupAtomURI, remoteGroupAtomURI,
-                            SocketType.GroupSocket.getURI(), SocketType.GroupSocket.getURI(),
-                            "Hello from the other group!");
+                    URI groupSocket = WonLinkedDataUtils.getSocketsOfType(groupAtomURI, SocketType.GroupSocket.getURI(),
+                                    getLinkedDataSource()).stream().findFirst().get();
+                    URI remoteGroupSocket = WonLinkedDataUtils.getSocketsOfType(remoteGroupAtomURI,
+                                    SocketType.GroupSocket.getURI(), getLinkedDataSource()).stream().findFirst().get();
+                    ConnectCommandEvent connectCommandEvent = new ConnectCommandEvent(groupSocket, remoteGroupSocket,
+                                    "Hello from the other group!");
                     // set up a listener for the result of the command
                     subscribeWithAutoCleanup(ConnectCommandResultEvent.class, new ActionOnFirstEventListener(context,
-                            new CommandResultFilter(connectCommandEvent), new BaseEventBotAction(context) {
-                        @Override
-                        protected void doRun(Event event, EventListener executingListener)
-                                throws Exception {
-                            ConnectCommandResultEvent resultEvent = (ConnectCommandResultEvent) event;
-                            logger.debug(
-                                    "sending connect to group atom {} on behalf of group atom {}, succeeded: {}",
-                                    connectCommandEvent.getTargetAtomURI(),
-                                    connectCommandEvent.getAtomURI(),
-                                    resultEvent.isSuccess());
-                        }
-                    }));
+                                    new CommandResultFilter(connectCommandEvent), new BaseEventBotAction(context) {
+                                        @Override
+                                        protected void doRun(Event event, EventListener executingListener)
+                                                        throws Exception {
+                                            ConnectCommandResultEvent resultEvent = (ConnectCommandResultEvent) event;
+                                            logger.info(
+                                                            "sending connect to group atom {} on behalf of group atom {}, succeeded: {}",
+                                                            connectCommandEvent.getTargetAtomURI(),
+                                                            connectCommandEvent.getAtomURI(),
+                                                            resultEvent.isSuccess());
+                                        }
+                                    }));
                     // set up a listener for the response from the group atom
-                    subscribeWithAutoCleanup(OpenFromOtherAtomEvent.class,
-                            new ActionOnEventListener(context, event -> {
-                                if (!(event instanceof OpenFromOtherAtomEvent))
-                                    return false;
-                                OpenFromOtherAtomEvent openEvent = (OpenFromOtherAtomEvent) event;
-                                if (!remoteGroupAtomURI.equals(openEvent.getTargetAtomURI()))
-                                    return false;
-                                return groupAtomURI.equals(openEvent.getAtomURI());
-                            }, new BaseEventBotAction(context) {
-                                @Override
-                                protected void doRun(Event event, EventListener executingListener)
-                                        throws Exception {
-                                    OpenFromOtherAtomEvent openEvent = (OpenFromOtherAtomEvent) event;
-                                    logger.debug("received open from group atom {} on behalf of group atom {}",
-                                            new Object[] { openEvent.getTargetAtomURI(),
-                                                    openEvent.getAtomURI() });
-                                    groupConnectionCounter.increment();
-                                }
-                            }));
+                    subscribeWithAutoCleanup(ConnectFromOtherAtomEvent.class,
+                                    new ActionOnEventListener(context, event -> {
+                                        if (!(event instanceof ConnectFromOtherAtomEvent))
+                                            return false;
+                                        ConnectFromOtherAtomEvent openEvent = (ConnectFromOtherAtomEvent) event;
+                                        if (!remoteGroupAtomURI.equals(openEvent.getTargetAtomURI()))
+                                            return false;
+                                        return groupAtomURI.equals(openEvent.getAtomURI());
+                                    }, new BaseEventBotAction(context) {
+                                        @Override
+                                        protected void doRun(Event event, EventListener executingListener)
+                                                        throws Exception {
+                                            ConnectFromOtherAtomEvent openEvent = (ConnectFromOtherAtomEvent) event;
+                                            logger.info("received open from group atom {} on behalf of group atom {}",
+                                                            new Object[] { openEvent.getTargetAtomURI(),
+                                                                            openEvent.getAtomURI() });
+                                            groupConnectionCounter.increment();
+                                        }
+                                    }));
                     // publish the command
                     context.getEventBus().publish(connectCommandEvent);
                 } // inner loop
@@ -424,19 +440,19 @@ public class GroupCycleBot extends EventBot {
         @Override
         protected void onActivate(Optional<Object> message) {
             subscribeWithAutoCleanup(MessageFromOtherAtomEvent.class,
-                    new ActionOnEventListener(context, new BaseEventBotAction(context) {
-                        @Override
-                        protected void doRun(Event event, EventListener executingListener) throws Exception {
-                            MessageFromOtherAtomEvent messageEvent = (MessageFromOtherAtomEvent) event;
-                            WonMessage message = ((MessageFromOtherAtomEvent) event).getWonMessage();
-                            String textMessage = WonRdfUtils.MessageUtils.getTextMessage(message);
-                            URI messageURI = message.getMessageURI();
-                            logger.debug("atom {} received message from atom {}, text: '{}', message uri: {}",
-                                    messageEvent.getAtomURI(),
-                                    messageEvent.getTargetAtomURI(),
-                                    textMessage, messageURI);
-                        }
-                    }));
+                            new ActionOnEventListener(context, new BaseEventBotAction(context) {
+                                @Override
+                                protected void doRun(Event event, EventListener executingListener) throws Exception {
+                                    MessageFromOtherAtomEvent messageEvent = (MessageFromOtherAtomEvent) event;
+                                    WonMessage message = ((MessageFromOtherAtomEvent) event).getWonMessage();
+                                    String textMessage = WonRdfUtils.MessageUtils.getTextMessage(message);
+                                    URI messageURI = message.getMessageURI();
+                                    logger.info("atom {} received message from atom {}, text: '{}', message uri: {}",
+                                                    messageEvent.getAtomURI(),
+                                                    messageEvent.getTargetAtomURI(),
+                                                    textMessage, messageURI);
+                                }
+                            }));
         }
     }
 
@@ -453,8 +469,8 @@ public class GroupCycleBot extends EventBot {
         protected void onActivate(Optional<Object> message) {
             // prepare the command
             ConnectionMessageCommandEvent initialMessageCommand = new ConnectionMessageCommandEvent(
-                    connectionForFirstMessage.getConnection(),
-                    WonRdfUtils.MessageUtils.textMessage("Hello, echo!"));
+                            connectionForFirstMessage.getConnection(),
+                            WonRdfUtils.MessageUtils.textMessage("Hello, echo!"));
             context.getEventBus().publish(initialMessageCommand);
         }
     }
@@ -497,41 +513,41 @@ public class GroupCycleBot extends EventBot {
         protected void onActivate(Optional<Object> message) {
             GroupBotContextWrapper botContextWrapper = (GroupBotContextWrapper) getBotContextWrapper();
             EventPublishingCounter receivedMessagesCounter = new EventPublishingCounter("receivedMessagesCounter",
-                    context);
+                            context);
             // count connection messages received by group members coming from groups
             subscribeWithAutoCleanup(MessageFromOtherAtomEvent.class,
-                    new ActionOnEventListener(context, event -> {
-                        if (!(event instanceof MessageFromOtherAtomEvent))
-                            return false;
-                        MessageFromOtherAtomEvent messageEvent = (MessageFromOtherAtomEvent) event;
-                        URI senderAtom = messageEvent.getTargetAtomURI();
-                        URI recipientAtom = messageEvent.getAtomURI();
-                        if (!botContextWrapper.getGroupMemberAtomUris().contains(recipientAtom))
-                            return false;
-                        return botContextWrapper.getGroupAtomUris().contains(senderAtom);
-                    }, new IncrementCounterAction(context, receivedMessagesCounter)));
+                            new ActionOnEventListener(context, event -> {
+                                if (!(event instanceof MessageFromOtherAtomEvent))
+                                    return false;
+                                MessageFromOtherAtomEvent messageEvent = (MessageFromOtherAtomEvent) event;
+                                URI senderAtom = messageEvent.getTargetAtomURI();
+                                URI recipientAtom = messageEvent.getAtomURI();
+                                if (!botContextWrapper.getGroupMemberAtomUris().contains(recipientAtom))
+                                    return false;
+                                return botContextWrapper.getGroupAtomUris().contains(senderAtom);
+                            }, new IncrementCounterAction(context, receivedMessagesCounter)));
             // produce log messages about the actual and expeced number of messages
             subscribeWithAutoCleanup(CountEvent.class, new ActionOnEventListener(context,
-                    receivedMessagesCounter.makeEventFilter(), new BaseEventBotAction(context) {
-                @Override
-                protected void doRun(Event event, EventListener executingListener) throws Exception {
-                    if (!(event instanceof CountEvent))
-                        return;
-                    CountEvent countEvent = (CountEvent) event;
-                    int currentCount = countEvent.getCount();
-                    int targetCount = NUMBER_OF_GROUPMEMBERS * NUMBER_OF_GROUPS - 1;
-                    if (currentCount < targetCount) {
-                        logger.info("received group message {} of {} ...", currentCount, targetCount);
-                    } else if (currentCount == targetCount) {
-                        logger.info("received group message {} of {}, target count reached",
-                                currentCount,
-                                targetCount);
-                    } else {
-                        logger.warn("received group message {} but only expected {} - something is wrong!",
-                                currentCount, targetCount);
-                    }
-                }
-            }));
+                            receivedMessagesCounter.makeEventFilter(), new BaseEventBotAction(context) {
+                                @Override
+                                protected void doRun(Event event, EventListener executingListener) throws Exception {
+                                    if (!(event instanceof CountEvent))
+                                        return;
+                                    CountEvent countEvent = (CountEvent) event;
+                                    int currentCount = countEvent.getCount();
+                                    int targetCount = NUMBER_OF_GROUPMEMBERS * NUMBER_OF_GROUPS - 1;
+                                    if (currentCount < targetCount) {
+                                        logger.info("received group message {} of {} ...", currentCount, targetCount);
+                                    } else if (currentCount == targetCount) {
+                                        logger.info("received group message {} of {}, target count reached",
+                                                        currentCount,
+                                                        targetCount);
+                                    } else {
+                                        logger.warn("received group message {} but only expected {} - something is wrong!",
+                                                        currentCount, targetCount);
+                                    }
+                                }
+                            }));
         }
     }
 
@@ -551,59 +567,59 @@ public class GroupCycleBot extends EventBot {
             EventPublishingCounter counter = new EventPublishingCounter("groupCreationCounter", context);
             // count group creations
             subscribeWithAutoCleanup(GroupCreatedEvent.class,
-                    new ActionOnEventListener(context, new IncrementCounterAction(context, counter)));
+                            new ActionOnEventListener(context, new IncrementCounterAction(context, counter)));
             // produce log messages about created groups
             subscribeWithAutoCleanup(CountEvent.class,
-                    new ActionOnEventListener(context, counter.makeEventFilter(),
-                            new BaseEventBotAction(context) {
+                            new ActionOnEventListener(context, counter.makeEventFilter(),
+                                            new BaseEventBotAction(context) {
+                                                @Override
+                                                protected void doRun(Event event, EventListener executingListener)
+                                                                throws Exception {
+                                                    if (!(event instanceof CountEvent))
+                                                        return;
+                                                    CountEvent countEvent = (CountEvent) event;
+                                                    int currentCount = countEvent.getCount();
+                                                    logger.info("created group {} of {} ", currentCount,
+                                                                    NUMBER_OF_GROUPS);
+                                                }
+                                            }));
+            // count when all members are created
+            EventPublishingCounter membersCreatedCounter = new EventPublishingCounter("membersCreatedCounter", context);
+            subscribeWithAutoCleanup(GroupMemberCreatedEvent.class,
+                            new ActionOnEventListener(context,
+                                            new IncrementCounterAction(context, membersCreatedCounter)));
+            // produce log messages about created members
+            subscribeWithAutoCleanup(CountEvent.class, new ActionOnEventListener(context,
+                            membersCreatedCounter.makeEventFilter(), new BaseEventBotAction(context) {
                                 @Override
-                                protected void doRun(Event event, EventListener executingListener)
-                                        throws Exception {
+                                protected void doRun(Event event, EventListener executingListener) throws Exception {
                                     if (!(event instanceof CountEvent))
                                         return;
                                     CountEvent countEvent = (CountEvent) event;
                                     int currentCount = countEvent.getCount();
-                                    logger.info("created group {} of {} ", currentCount,
-                                            NUMBER_OF_GROUPS);
+                                    int targetCount = NUMBER_OF_GROUPS * NUMBER_OF_GROUPMEMBERS;
+                                    logger.info("created group member {} of {}", currentCount, targetCount);
                                 }
                             }));
-            // count when all members are created
-            EventPublishingCounter membersCreatedCounter = new EventPublishingCounter("membersCreatedCounter", context);
-            subscribeWithAutoCleanup(GroupMemberCreatedEvent.class,
-                    new ActionOnEventListener(context,
-                            new IncrementCounterAction(context, membersCreatedCounter)));
-            // produce log messages about created members
-            subscribeWithAutoCleanup(CountEvent.class, new ActionOnEventListener(context,
-                    membersCreatedCounter.makeEventFilter(), new BaseEventBotAction(context) {
-                @Override
-                protected void doRun(Event event, EventListener executingListener) throws Exception {
-                    if (!(event instanceof CountEvent))
-                        return;
-                    CountEvent countEvent = (CountEvent) event;
-                    int currentCount = countEvent.getCount();
-                    int targetCount = NUMBER_OF_GROUPS * NUMBER_OF_GROUPMEMBERS;
-                    logger.info("created group member {} of {}", currentCount, targetCount);
-                }
-            }));
             // count when all members are connected
             EventPublishingCounter membersConnectedCounter = new EventPublishingCounter("membersConnectedCounter",
-                    context);
+                            context);
             subscribeWithAutoCleanup(GroupMembersConnectedEvent.class,
-                    new ActionOnEventListener(context,
-                            new IncrementCounterAction(context, membersConnectedCounter)));
+                            new ActionOnEventListener(context,
+                                            new IncrementCounterAction(context, membersConnectedCounter)));
             // produce log messages about connected members
             subscribeWithAutoCleanup(CountEvent.class, new ActionOnEventListener(context,
-                    membersConnectedCounter.makeEventFilter(), new BaseEventBotAction(context) {
-                @Override
-                protected void doRun(Event event, EventListener executingListener) throws Exception {
-                    if (!(event instanceof CountEvent))
-                        return;
-                    CountEvent countEvent = (CountEvent) event;
-                    int currentCount = countEvent.getCount();
-                    logger.info("connected all group members to group {} of {}", currentCount,
-                            NUMBER_OF_GROUPS);
-                }
-            }));
+                            membersConnectedCounter.makeEventFilter(), new BaseEventBotAction(context) {
+                                @Override
+                                protected void doRun(Event event, EventListener executingListener) throws Exception {
+                                    if (!(event instanceof CountEvent))
+                                        return;
+                                    CountEvent countEvent = (CountEvent) event;
+                                    int currentCount = countEvent.getCount();
+                                    logger.info("connected all group members to group {} of {}", currentCount,
+                                                    NUMBER_OF_GROUPS);
+                                }
+                            }));
         }
     }
 
